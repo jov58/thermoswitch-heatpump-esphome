@@ -31,7 +31,7 @@ After building the complete device I expanded the software to the [current versi
 + Switching temperature and hysteresis adjustable from the front end
 + Adjusted settings are stored in the device itself (retained after reboot)
 + Manual override: force heating by heat pump or by auxiliary boiler
-+ Two LED's on the device itself to indicate the status independently from the front end
++ Two LED's on the device itself to indicate the status independent from the front end
 + Have a nice extra outside temperature sensor in the front end
 + Webserver to see the log and status of all entities (normal, disabled, internal) at once
 
