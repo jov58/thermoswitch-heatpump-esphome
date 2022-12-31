@@ -1,7 +1,7 @@
 # Thermoswitch Heat Pump ↔ Auxiliary Boiler
 A temperature controlled relay switch for a space heating solution by either a heat pump or by an auxiliary boiler connected in the system. The heating in such a system will automatically switch from heat pump to auxiliary boiler when the temperature drops below a certain temperature and vice versa.
 
-I wanted to replace our old mechanical switching device (mounted outside) with a modern version (only sensor outside). Using an ESP with a wired temperature sensor, relay and two LED's, I built this device:
+I wanted to replace our old mechanical switching device (mounted outside) with a modern version (only temperature sensor outside). Using an ESP with a wired temperature sensor, relay and two LED's, I built this device:
 
 <picture><img alt="device photo" src="schematics/device.jpg"></picture>
 
