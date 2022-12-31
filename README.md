@@ -45,6 +45,10 @@ It took me a while to figure out how to let a LED blink in different ways in ESP
 |	on					| slow blink	|	on		| Same but temperature is in upper half hysteresis. Seems temperature is rising, almost switching to heat pump.
 | off					| fast blink	| off		| Manual operation, heating set to heat pump |
 | fast blink	|	off					| on		| Manual operation, heating set to auxiliary boiler |
+| off					| off					| off		| Heating by heat pump, returning from manual to automatic mode* |
+| off					| off					| on		| Heating by auxiliary boiler, returning from manual to automatic mode* |
+
+##### *) It may take until the next change in temperature until the red and green LED show the current state.
 
 Any other combination is invalid and indicates some kind of error, either in hardware or in software.
 
