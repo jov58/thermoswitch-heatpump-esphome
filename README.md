@@ -1,7 +1,7 @@
 # Thermoswitch Heat Pump ↔ Auxiliary Boiler
 A temperature controlled relay switch for a space heating solution by either a heat pump or by an auxiliary boiler connected in the system. The heating in such a system will automatically switch from heat pump to auxiliary boiler when the temperature drops below a certain temperature and vice versa.
 
-I wanted to replace our old mechanical switching device (mounted outside) with a modern version (only temperature sensor outside). Using an ESP with a wired temperature sensor, relay and two LED's, I built this device:
+I wanted to replace our old mechanical switching device (mounted outside) with a modern version (only temperature sensor outside). Using an ESP with a wired temperature sensor, relay and two LEDs, I built this device:
 
 <picture><img alt="device photo" src="schematics/device.jpg"></picture>
 
@@ -31,7 +31,7 @@ After building the complete device I expanded the software to the [current versi
 + Switching temperature and hysteresis adjustable from the front end
 + Adjusted settings are stored in the device itself (retained after reboot)
 + Manual override: force heating by heat pump or by auxiliary boiler
-+ Two LED's on the device itself to indicate the status independent from the front end
++ Two LEDs on the device itself to indicate the status independent from the front end
 + Have a nice extra outside temperature sensor in the front end
 + Webserver to see the log and status of all entities (normal, disabled, internal) at once
 
@@ -48,7 +48,7 @@ It took me a while to figure out how to let a LED blink in different ways in ESP
 | off					| off					| off		| Heating by heat pump, returning from manual to automatic mode* |
 | off					| off					| on		| Heating by auxiliary boiler, returning from manual to automatic mode* |
 
-##### *) It may take until the next change in temperature until the red and green LED show the current state.
+##### *) It may take until the next change in temperature for the relay and LEDs to be in the correct automatic position.
 
 Any other combination is invalid and indicates some kind of error, either in hardware or in software.
 
