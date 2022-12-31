@@ -47,7 +47,7 @@ wifi:
   manual_ip:
     static_ip: !secret thermoswitch_heatpump_ip
 
-# Web server shows all (normal, disabled and internal) entities
+# Web server shows all entities (normal, disabled and internal)
 
 web_server:
   port: 80
@@ -109,6 +109,22 @@ script:
       - light.turn_off: red
       - light.turn_off: green
       - lambda: 'id(green_mode) = 3;'
+      - light.turn_on: green
+
+  # Red LED steady ON
+  - id: red_steady
+    then:
+      - light.turn_off: green
+      - light.turn_off: red
+      - lambda: 'id(red_mode) = 1;'
+      - light.turn_on: red
+
+  # Green LED steady ON
+  - id: green_steady
+    then:
+      - light.turn_off: red
+      - light.turn_off: green
+      - lambda: 'id(green_mode) = 1;'
       - light.turn_on: green
 
 
@@ -247,7 +263,16 @@ switch:
             - switch.turn_off: manual_op
     turn_off_action:
       - lambda: "id(manual) = false;"
-      # Back to automatic mode: update temperature with relay setting now
+      # Force LED's to follow current relay state
+      - if: # relay is ON
+          condition:
+            lambda: "return id(relay).state;"
+          then:
+            - script.execute: red_steady
+          else:
+            - script.execute: green_steady
+      # Back to automatic mode: update temperature and relay setting
+      # Only updates when temperature has changed
       - component.update: dallas_hub
     # Front end
     name: $device_name $device_manual
@@ -321,9 +346,7 @@ sensor:
                   then: # all switches on and steady red LED
                     - switch.turn_on: relay
                     - switch.turn_on: manual_op # let manual switch follow
-                    - lambda: 'id(red_mode) = 1; id(green_mode) = 0;'
-                    - light.turn_off: green
-                    - light.turn_on: red
+                    - script.execute: red_steady
                   else:
                   - if: # temperature is above the switching range
                       condition:
@@ -331,9 +354,7 @@ sensor:
                       then: # all switches off and steady green LED
                         - switch.turn_off: relay   
                         - switch.turn_off: manual_op # let manual switch follow
-                        - lambda: 'id(red_mode) = 0; id(green_mode) = 1;'
-                        - light.turn_off: red
-                        - light.turn_on: green
+                        - script.execute: green_steady
               - if: # temperature in lower half of hysteresis while (still) off
                   condition:
                     lambda: 'return !id(relay).state && id(ds18b20).state < id(switching_temperature).state;'
@@ -378,10 +399,11 @@ light:
           condition:
             lambda: 'return id(red_mode) == 0;'
           then: # really turn off now
-            - light.turn_off: red
-          else: # red is on
+            - output.turn_off: red_pin
+          else: # make sure red is on
+            - output.turn_on: red_pin
             - while:
-                condition: # slow blinking?
+                condition: # add slow blinking?
                   lambda: 'return id(red_mode) == 2;'
                 then:
                   - output.turn_on: red_pin
@@ -389,7 +411,7 @@ light:
                   - output.turn_off: red_pin
                   - delay: 1500ms
             - while:
-                condition: # fast blinking?
+                condition: # add fast blinking?
                   lambda: 'return id(red_mode) == 3;'
                 then:
                   - output.turn_on: red_pin
@@ -409,10 +431,11 @@ light:
           condition:
             lambda: 'return id(green_mode) == 0;'
           then: # really turn off now
-            - light.turn_off: green
-          else: # green is on
+            - output.turn_off: green_pin
+          else: # make sure green is on
+            - output.turn_on: green_pin
             - while:
-                condition: # slow blinking?
+                condition: # add slow blinking?
                   lambda: 'return id(green_mode) == 2;'
                 then:
                   - output.turn_on: green_pin
@@ -420,7 +443,7 @@ light:
                   - output.turn_off: green_pin
                   - delay: 1500ms
             - while:
-                condition: # fast blinking?
+                condition: # add fast blinking?
                   lambda: 'return id(green_mode) == 3;'
                 then:
                   - output.turn_on: green_pin
