@@ -21,7 +21,7 @@ It can be connected to a front end like Home Assistant. The red and green LED sh
 A bit cramped, but I managed to put all the parts together with the help of a [3D printed mounting plate, some spacers](https://www.thingiverse.com/thing:5754060) and a glue gun - very handy to hold parts and wires into place.
 
 ## Software
-There is a [first version](esphome/thermoswitch-heatpump-first.yaml) of the software that I used for breadboard testing and calibrating the temperature sensor. D1, D2, R1 and R2 are not needed at this stage. This version does the job as it should, shows entities in the front end but no controls. Changing parameters means editing the yaml and upload it again. In Home Assistant it looks like [this](homeassistant/Thermoswitch%20Heat%20Pump%20First.png).
+There is a [first version](esphome/thermoswitch-heatpump-first.yaml) of the software that I used for breadboard testing and calibrating the temperature sensor. D1, D2, R1 and R2 are not needed at this stage. This version does the job as it should, shows entities in the front end but lacks controls. Changing parameters means editing the yaml and upload it again. In Home Assistant it looks like [this](homeassistant/Thermoswitch%20Heat%20Pump%20First.png).
 
 ***Test procedure***: upload with switching temperature temporarily set a few degrees higher than room temperature → after reboot relay should be ON (= blue LED on Wemos Relay Shield ON) → warm-up sensor → relay should switch off → cool-down sensor → relay should switch on again.
 
