@@ -14,7 +14,7 @@ substitutions:
   # Text sensors that show up in the front end
   device_temperature: "Buitentemperatuur"           # "Outside temperature"
   device_range:       "Schakelrange"                # "Switching range"
-  device_status:      "Status"                      # "State" (state_heatpump or state_boiler)
+  device_status:      "Status"                      # "State"
   state_heatpump:     "Warmtepomp"                  # "Heat pump"
   state_boiler:       "CV-ketel"                    # "Auxiliary boiler"
   device_switch_temp: "Schakeltemperatuur"          # "Switching temperature"
