@@ -1,0 +1,189 @@
+###############################################################################################
+#
+# A simple temperature controlled relay switch for a space heating solution by either
+# a heat pump or by an auxiliary boiler connected in the system.
+#
+# See https://github.com/jov58/thermoswitch-heatpump-esphome for more information.
+#
+###############################################################################################
+
+substitutions:
+
+  device_name:        "Thermoswitch Warmtepomp"     # "Thermoswitch Heat Pump"
+
+  # Text sensors that show up in the front end
+  device_temperature: "Buitentemperatuur"           # "Outside temperature"
+  device_info:        "Schakelrange"                # "Switching range"
+  device_status:      "Status"                      # "State" (state_heatpump or state_boiler)
+  state_heatpump:     "Warmtepomp"                  # "Heat pump"
+  state_boiler:       "CV-ketel"                    # "Auxiliary boiler"
+
+  # Default switching parameters
+  default_switching_temperature:      "-3.5"        # Default -3.5 °C
+  default_hysteresis:                 "1"           # Default  1.0 °C
+
+esphome:
+  name: "thermoswitch-heatpump"                     # Rename to "device_name" in the front end
+
+esp8266:
+  board: d1_mini
+
+packages:
+  alow:     !include common/api_logger_ota_wifi.yaml
+  restart:  !include common/restart.yaml
+  diags:    !include common/diagnostics.yaml
+  staticip: !include common/static_ip.yaml
+
+ota:
+  password: !secret thermoswitch_heatpump_ota_password
+
+wifi:
+  manual_ip:
+    static_ip: !secret thermoswitch_heatpump_ip
+
+
+# Scripted actions
+
+script:
+
+  # Update text sensor with state parameters - used by number platform
+  - id: update_text_state_parameters
+    then:
+      - text_sensor.template.publish:
+          id: state_parameters
+          state: !lambda |-
+            char buf[32];
+            sprintf(buf, "%.1lf ± %.2lf °C", id(switching_temperature).state, id(hysteresis).state/2);
+            return String(buf).c_str();
+
+
+# Parameters
+
+number:
+
+  # These parameters control the switching behaviour.
+
+  # Switching temperature
+  - platform: template
+    id: switching_temperature
+    optimistic: true
+    initial_value: $default_switching_temperature
+    min_value: -7
+    max_value: 2
+    step: 0.5
+    restore_value: false
+    on_value:
+      then:
+        - script.execute: update_text_state_parameters
+    # Front end
+    internal: true
+
+  # Switch hysteresis
+  - platform: template
+    id: hysteresis
+    optimistic: true
+    initial_value: $default_hysteresis
+    min_value: 0.5
+    max_value: 3
+    step: 0.5
+    restore_value: false
+    on_value:
+      then:
+        - script.execute: update_text_state_parameters
+    # Front end
+    internal: true
+
+
+# Front end informational sensors
+
+binary_sensor:
+
+  # Show state as On/Off (where On indicates heating on boiler)
+  - platform: template
+    id: state_binary
+    # Front end
+    name: $device_name $device_status
+    icon: mdi:gas-burner
+
+text_sensor:
+
+  # Show state as "heat pump" or "boiler"
+  - platform: template
+    id: state_verbose
+    # Front end
+    name: $device_name $device_status
+    icon: mdi:gas-burner
+
+  # Show switching range like "-3.5 ± 0.50 °C"
+  - platform: template
+    id: state_parameters
+    # Front end
+    name: $device_name $device_info
+    icon: mdi:thermometer-auto
+
+
+# Relay
+
+switch:
+
+  # The relay is controlled internally by the logic of the temperature sensor
+  - platform: gpio
+    id: relay
+    pin: GPIO5
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - text_sensor.template.publish:
+          id: state_verbose
+          state: $state_boiler
+      - binary_sensor.template.publish:
+          id: state_binary
+          state: ON
+    on_turn_off:
+      - text_sensor.template.publish:
+          id: state_verbose
+          state: $state_heatpump
+      - binary_sensor.template.publish:
+          id: state_binary
+          state: OFF
+    # Front end - not visible
+    internal: true
+
+
+# Temperature
+
+dallas:
+
+  - pin: 4
+    update_interval: 5min
+
+sensor:
+
+  # Waterproof DS18B20 outside temperature sensor
+  - platform: dallas
+    address: 0x0c031700a729ff28
+    id: ds18b20
+    filters:
+      offset: 0.25                # Calibrated this sensor to 0.0 °C in water with melting ice
+    accuracy_decimals: 1
+
+    # Control logic to operate the relay
+    on_value:
+      then:
+        - if: # temperature is below the switching range
+            condition:
+              lambda: 'return id(ds18b20).state < (id(switching_temperature).state - id(hysteresis).state/2);'
+            then: # switch on
+              - switch.turn_on: relay
+            else:
+            - if: # temperature is above the switching range
+                condition:
+                  lambda: 'return id(ds18b20).state >= (id(switching_temperature).state + id(hysteresis).state/2);'
+                then: # switch off
+                  - switch.turn_off: relay   
+
+    # Front end
+    name: $device_name $device_temperature
+    icon: mdi:home-thermometer-outline
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: "°C"

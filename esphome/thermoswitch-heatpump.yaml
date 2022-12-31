@@ -1,0 +1,432 @@
+###############################################################################################
+#
+# Advanced temperature controlled relay switch for a space heating solution by either
+# a heat pump or by an auxiliary boiler connected in the system.
+#
+# See https://github.com/jov58/thermoswitch-heatpump-esphome for more information.
+#
+###############################################################################################
+
+substitutions:
+
+  device_name:        "Thermoswitch Warmtepomp"     # "Thermoswitch Heat Pump"
+
+  # Text sensors that show up in the front end
+  device_temperature: "Buitentemperatuur"           # "Outside temperature"
+  device_range:       "Schakelrange"                # "Switching range"
+  device_status:      "Status"                      # "State" (state_heatpump or state_boiler)
+  state_heatpump:     "Warmtepomp"                  # "Heat pump"
+  state_boiler:       "CV-ketel"                    # "Auxiliary boiler"
+  device_switch_temp: "Schakeltemperatuur"          # "Switching temperature"
+  device_hysteresis:  "Schakelhysterese"            # "Switching hysteresis"
+  device_reset:       "Reset"                       # "Reset" (switching parameters)
+  device_manual:      "Handmatig: toestaan"         # "Manual: allow"
+  device_switch:      "Handmatig: zet CV aan"       # "Manual: boiler on"
+
+  # Default switching parameters
+  default_switching_temperature:      "-3.5"        # Default -3.5 °C
+  default_hysteresis:                 "1"           # Default  1.0 °C
+
+esphome:
+  name: "thermoswitch-heatpump"
+
+esp8266:
+  board: d1_mini
+
+packages:
+  alow:     !include common/api_logger_ota_wifi.yaml
+  restart:  !include common/restart.yaml
+  diags:    !include common/diagnostics.yaml
+  staticip: !include common/static_ip.yaml
+
+# Secrets in /esphome/secrets.yaml
+ota:
+  password: !secret thermoswitch_heatpump_ota_password
+
+wifi:
+  manual_ip:
+    static_ip: !secret thermoswitch_heatpump_ip
+
+# Web server shows all (normal, disabled and internal) entities
+
+web_server:
+  port: 80
+  local: True
+  ota: False
+  include_internal: true
+  version: 2
+  auth:
+    username: admin
+    password: !secret thermoswitch_heatpump_web_password
+
+
+globals:
+
+  # Manual or automatic mode
+  - id: manual
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Red LED mode: 0 = off, 1 = steady, 2 = slow blink, 3 = fast blink
+  - id: red_mode
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+  # Green LED mode: 0 = off, 1 = steady, 2 = slow blink, 3 = fast blink
+  - id: green_mode
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+
+# Scripted actions
+
+script:
+
+  # Update text sensor with state parameters - used by number platform
+  - id: update_text_state_parameters
+    then:
+      - text_sensor.template.publish:
+          id: state_parameters
+          state: !lambda |-
+            char buf[32];
+            sprintf(buf, "%.1lf ± %.2lf °C", id(switching_temperature).state, id(hysteresis).state/2);
+            return String(buf).c_str();
+
+  # Blink red LED fast - used by manual mode switches
+  - id: red_fast
+    then:
+      - light.turn_off: green
+      - light.turn_off: red
+      - lambda: 'id(red_mode) = 3;'
+      - light.turn_on: red
+
+  # Blink green LED fast - used by manual mode switches
+  - id: green_fast
+    then:
+      - light.turn_off: red
+      - light.turn_off: green
+      - lambda: 'id(green_mode) = 3;'
+      - light.turn_on: green
+
+
+# Parameters
+
+number:
+
+  # These parameters can be adjusted in the front end
+  # (device config menu). This device stores the values.
+
+  # Switching temperature
+  - platform: template
+    id: switching_temperature
+    optimistic: true
+    initial_value: $default_switching_temperature
+    min_value: -7
+    max_value: 2
+    step: 0.5
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: update_text_state_parameters
+    # Front end
+    name: $device_name $device_switch_temp
+    icon: mdi:thermometer-auto
+    entity_category: config
+    device_class: temperature
+    unit_of_measurement: "°C"
+    mode: box
+
+  # Switching hysteresis
+  - platform: template
+    id: hysteresis
+    optimistic: true
+    initial_value: $default_hysteresis
+    min_value: 0.5
+    max_value: 3
+    step: 0.5
+    restore_value: true
+    on_value:
+      then:
+        - script.execute: update_text_state_parameters
+    # Front end
+    name: $device_name $device_hysteresis
+    icon: mdi:thermometer-lines
+    entity_category: config
+    device_class: temperature
+    unit_of_measurement: "°C"
+    mode: box
+
+
+# Front-end button and sensors
+
+button:
+
+  # Button to reset switching parameters to default
+  - platform: template
+    on_press:
+      then:
+        - number.set:
+            id: switching_temperature
+            value: $default_switching_temperature
+        - number.set:
+            id: hysteresis
+            value: $default_hysteresis
+    # Front end
+    name: $device_name $device_reset
+    icon: mdi:lock-reset
+    entity_category: config
+
+binary_sensor:
+
+  # Show binary state as On/Off
+  - platform: template
+    id: state_binary
+    # Front end
+    name: $device_name $device_status
+    icon: mdi:gas-burner
+
+text_sensor:
+
+  # Show state as "Heat pump" or "Boiler"
+  - platform: template
+    id: state_verbose
+    # Front end
+    name: $device_name $device_status
+    icon: mdi:gas-burner
+
+  # Show switching range like "-3.5 ± 0.50 °C"
+  - platform: template
+    id: state_parameters
+    # Front end
+    name: $device_name $device_range
+    icon: mdi:thermometer-auto
+
+
+# Relay and front-end switches
+
+switch:
+
+  # The relay is controlled internally by the logic of the temperature sensor
+  # When on manual, this switch is controlled through switch manual_op
+  - platform: gpio
+    id: relay
+    pin: GPIO5
+    internal: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - text_sensor.template.publish:
+          id: state_verbose
+          state: $state_boiler
+      - binary_sensor.template.publish:
+          id: state_binary
+          state: ON
+    on_turn_off:
+      - text_sensor.template.publish:
+          id: state_verbose
+          state: $state_heatpump
+      - binary_sensor.template.publish:
+          id: state_binary
+          state: OFF
+
+  # Front-end switch to enable manual operation
+  - platform: template
+    id: manual_mode
+    restore_mode: ALWAYS_OFF
+    optimistic: true
+    turn_on_action:
+      - lambda: "id(manual) = true;"
+      - if: # relay is ON
+          condition:
+            lambda: "return id(relay).state;"
+          then: # set manual switch ON
+            - switch.turn_on: manual_op
+          else: # set manual switch OFF
+            - switch.turn_off: manual_op
+    turn_off_action:
+      - lambda: "id(manual) = false;"
+      # Back to automatic mode: update temperature with relay setting now
+      - component.update: dallas_hub
+    # Front end
+    name: $device_name $device_manual
+    icon: mdi:button-pointer
+
+  # Front-end switch to perform manual operation
+  # In the front end, this switch follows the state of the device. When not in manual mode,
+  # the switch seems to be operable but it doesn't do anything and will eventually follow
+  # the state again. Only when manual operation is allowed the switch does it's work.
+  - platform: template
+    restore_mode: ALWAYS_OFF
+    id: manual_op
+    optimistic: true
+    on_turn_on:
+      - if:
+          condition:
+            lambda: "return id(manual);"
+          then:
+            - script.execute: red_fast
+    on_turn_off:
+      - if:
+          condition:
+            lambda: "return id(manual);"
+          then:
+            - script.execute: green_fast
+    turn_on_action:
+      - if:
+          condition:
+            lambda: "return id(manual);"
+          then:
+            - switch.turn_on: relay
+            - script.execute: red_fast
+    turn_off_action:
+      - if:
+          condition:
+            lambda: "return id(manual);"
+          then:
+            - switch.turn_off: relay
+            - script.execute: green_fast
+    # Front end
+    name: $device_name $device_switch
+    icon: mdi:gas-burner
+
+
+# Temperature
+
+dallas:
+
+  - pin: 4
+    id: dallas_hub
+    update_interval: 5min
+
+sensor:
+
+  - platform: dallas
+    address: 0x0c031700a729ff28
+    id: ds18b20
+    filters:
+      offset: 0.25        # Calibrated to 0.0 °C in water with melting ice
+    accuracy_decimals: 1
+
+    on_value:
+      then:
+        - if: # not in manual mode
+            condition:
+              lambda: "return !id(manual);"
+            then:
+              - if: # temperature is below the switching range
+                  condition:
+                    lambda: 'return id(ds18b20).state < (id(switching_temperature).state - id(hysteresis).state/2);'
+                  then: # all switches on and steady red LED
+                    - switch.turn_on: relay
+                    - switch.turn_on: manual_op # let manual switch follow
+                    - lambda: 'id(red_mode) = 1; id(green_mode) = 0;'
+                    - light.turn_off: green
+                    - light.turn_on: red
+                  else:
+                  - if: # temperature is above the switching range
+                      condition:
+                        lambda: 'return id(ds18b20).state >= (id(switching_temperature).state + id(hysteresis).state/2);'
+                      then: # all switches off and steady green LED
+                        - switch.turn_off: relay   
+                        - switch.turn_off: manual_op # let manual switch follow
+                        - lambda: 'id(red_mode) = 0; id(green_mode) = 1;'
+                        - light.turn_off: red
+                        - light.turn_on: green
+              - if: # temperature in lower half of hysteresis while (still) off
+                  condition:
+                    lambda: 'return !id(relay).state && id(ds18b20).state < id(switching_temperature).state;'
+                  then: # add slow blinking red LED
+                    - lambda: 'id(red_mode) = 2;'
+                    - light.turn_on: red
+              - if: # temperature in upper half of hysteresis while (still) on
+                  condition:
+                    lambda: 'return id(relay).state && id(ds18b20).state >= id(switching_temperature).state;'
+                  then: # add slow blinking green LED
+                    - lambda: 'id(green_mode) = 2;'
+                    - light.turn_on: green
+
+    # Front end
+    name: $device_name $device_temperature
+    icon: mdi:home-thermometer-outline
+    device_class: temperature
+    state_class: measurement
+    unit_of_measurement: "°C"
+
+
+# LED's
+
+output:
+
+  - platform: gpio
+    id: red_pin     # 3 mm red LED with 200 Ohm resistor
+    pin: GPIO12
+
+  - platform: gpio
+    id: green_pin   # 3 mm green LED with 200 Ohm resistor
+    pin: GPIO13
+
+light:
+
+  - platform: binary
+    id: red
+    output: red_pin
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - if: # red should be off
+          condition:
+            lambda: 'return id(red_mode) == 0;'
+          then: # really turn off now
+            - light.turn_off: red
+          else: # red is on
+            - while:
+                condition: # slow blinking?
+                  lambda: 'return id(red_mode) == 2;'
+                then:
+                  - output.turn_on: red_pin
+                  - delay: 500ms 
+                  - output.turn_off: red_pin
+                  - delay: 1500ms
+            - while:
+                condition: # fast blinking?
+                  lambda: 'return id(red_mode) == 3;'
+                then:
+                  - output.turn_on: red_pin
+                  - delay: 200ms 
+                  - output.turn_off: red_pin
+                  - delay: 200ms
+    on_turn_off:
+      - lambda: 'id(red_mode) = 0;'
+      - output.turn_off: red_pin
+
+  - platform: binary
+    id: green
+    output: green_pin
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - if: # green should be off
+          condition:
+            lambda: 'return id(green_mode) == 0;'
+          then: # really turn off now
+            - light.turn_off: green
+          else: # green is on
+            - while:
+                condition: # slow blinking?
+                  lambda: 'return id(green_mode) == 2;'
+                then:
+                  - output.turn_on: green_pin
+                  - delay: 500ms 
+                  - output.turn_off: green_pin
+                  - delay: 1500ms
+            - while:
+                condition: # fast blinking?
+                  lambda: 'return id(green_mode) == 3;'
+                then:
+                  - output.turn_on: green_pin
+                  - delay: 200ms 
+                  - output.turn_off: green_pin
+                  - delay: 200ms
+    on_turn_off:
+      - lambda: 'id(green_mode) = 0;'
+      - output.turn_off: green_pin

@@ -1,0 +1,61 @@
+text_sensor:
+
+  - platform: template
+    name: $device_name Uptime
+    id: up_since
+    icon: mdi:clock-start
+    entity_category: "diagnostic"
+
+  - platform: wifi_info
+    ip_address:
+      name: $device_name Wifi IP Address
+      icon: mdi:ip-network
+    ssid:
+      name: $device_name Wifi SSID
+      disabled_by_default: true
+    bssid:
+      name: $device_name Wifi BSSID
+      disabled_by_default: true
+    mac_address:
+      name: $device_name Wifi Mac Address
+      disabled_by_default: true
+
+sensor:
+
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: $device_name WiFi Signal dB
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+    disabled_by_default: true
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: $device_name WiFi Signal Percent
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    entity_category: "diagnostic"
+
+  - platform: uptime
+    id: upsince_sensor
+    update_interval: 5min
+    on_raw_value:
+      then:
+        - text_sensor.template.publish:
+            id: up_since
+            state: !lambda |-
+              int secs    = round(id(upsince_sensor).raw_state);
+              int days    = secs / (24 * 3600);
+              secs        = secs % (24 * 3600);
+              int hours   = secs / 3600;
+              secs        = secs % 3600;
+              int minutes = secs /  60;
+              secs        = secs % 60;
+              return (
+                (days ? to_string(days) + "d " : "")
+                + (hours ? to_string(hours) + "h " : "")
+                + (minutes ? to_string(minutes) + "m " : "")
+                + (to_string(secs) + "s")
+              ).c_str();
+    entity_category: "diagnostic"
